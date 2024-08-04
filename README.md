@@ -79,5 +79,5 @@ I can't guarantee or can be held responsible if you get blocked or banned by usi
 
     <br>
 
-  <a href="https://raganork.tk/render-deploy" target="blank"><img align="center" src="https://i.imgur.com/bBmwLPl.png" alt="Deploy bot" height="112" width="310" /></a>
+  <a href="https://dashboard.render.com/" target="blank"><img align="center" src="https://i.imgur.com/bBmwLPl.png" alt="Deploy bot" height="112" width="310" /></a>
   <div>
