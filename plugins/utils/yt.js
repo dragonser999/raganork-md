@@ -7,6 +7,36 @@ const { execFile } = require("child_process");
 const BASE = "https://jerrycoder.oggyapi.workers.dev";
 const TEMP_DIR = path.join(os.tmpdir(), "yt-bot-temp");
 
+const BROWSER_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  Accept: "application/json, text/plain, */*",
+  "Accept-Language": "en-US,en;q=0.9",
+};
+
+const api = axios.create({
+  headers: BROWSER_HEADERS,
+  timeout: 20000,
+});
+
+// Calls the API with browser-like headers, retrying once on a transient
+// server error (502/503/504/timeout) — Cloudflare Workers occasionally
+// bounce a request, a single retry after a short wait clears most of these.
+async function apiGet(endpoint, params, retries = 1) {
+  try {
+    const { data } = await api.get(`${BASE}${endpoint}`, { params });
+    return data;
+  } catch (error) {
+    const status = error.response?.status;
+    const isTransient = !status || [502, 503, 504].includes(status);
+    if (isTransient && retries > 0) {
+      await new Promise((r) => setTimeout(r, 1500));
+      return apiGet(endpoint, params, retries - 1);
+    }
+    throw new Error(`API error: ${status || error.message}`);
+  }
+}
+
 if (!fs.existsSync(TEMP_DIR)) {
   fs.mkdirSync(TEMP_DIR, { recursive: true });
 }
@@ -31,7 +61,8 @@ async function downloadFile(url, filename) {
   const destPath = path.join(TEMP_DIR, `${Date.now()}_${safeName(filename)}`);
   const response = await axios.get(url, {
     responseType: "stream",
-    headers: { "User-Agent": "Mozilla/5.0" },
+    headers: BROWSER_HEADERS,
+    timeout: 60000,
   });
 
   await new Promise((resolve, reject) => {
@@ -50,9 +81,7 @@ async function downloadFile(url, filename) {
  * @param {number} limit
  */
 async function searchYoutube(query, limit = 10) {
-  const { data } = await axios.get(`${BASE}/search/youtube`, {
-    params: { q: query },
-  });
+  const data = await apiGet("/search/youtube", { q: query });
 
   if (!data || data.status !== "success" || !Array.isArray(data.result)) {
     return [];
@@ -74,9 +103,7 @@ async function searchYoutube(query, limit = 10) {
  * @param {string} url
  */
 async function getVideoInfo(url) {
-  const { data } = await axios.get(`${BASE}/down/youtube`, {
-    params: { url },
-  });
+  const data = await apiGet("/down/youtube", { url });
 
   if (!data || data.status !== "success") {
     throw new Error("Failed to fetch video info");
@@ -127,9 +154,7 @@ async function getVideoInfo(url) {
  * @param {string} quality
  */
 async function downloadVideo(url, quality) {
-  const { data } = await axios.get(`${BASE}/down/youtube`, {
-    params: { url },
-  });
+  const data = await apiGet("/down/youtube", { url });
 
   if (!data || data.status !== "success") {
     throw new Error("Failed to fetch video info");
@@ -142,9 +167,7 @@ async function downloadVideo(url, quality) {
 
   if (!media) {
     // fall back to the quick single-quality endpoint (usually 720p)
-    const { data: alt } = await axios.get(`${BASE}/down/ytmp4-v1`, {
-      params: { url },
-    });
+    const alt = await apiGet("/down/ytmp4-v1", { url });
     if (!alt || alt.status !== "success" || !alt.url) {
       throw new Error(`Quality ${quality} not available`);
     }
@@ -161,9 +184,7 @@ async function downloadVideo(url, quality) {
  * @param {string} url
  */
 async function downloadAudio(url) {
-  const { data } = await axios.get(`${BASE}/down/ytmp3`, {
-    params: { url },
-  });
+  const data = await apiGet("/down/ytmp3", { url });
 
   if (!data || data.status !== "success" || !data.url) {
     throw new Error("Failed to fetch audio");
@@ -230,9 +251,7 @@ async function convertM4aToMp3(audioPath, meta = {}) {
  * @param {string} url
  */
 async function spotifyTrack(url) {
-  const { data } = await axios.get(`${BASE}/down/spotify`, {
-    params: { url },
-  });
+  const data = await apiGet("/down/spotify", { url });
 
   if (!data || data.status !== "success") {
     throw new Error("Failed to fetch Spotify track info");
