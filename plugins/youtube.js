@@ -8,7 +8,7 @@ const {
   getVideoInfo,
   convertM4aToMp3,
 } = require("./utils/yt");
-const { spotifyTrack } = require("./utils/yt");
+const { spotifyTrack, downloadSpotifyTrack } = require("./utils/yt");
 
 const config = require("../config");
 const MODE = config.MODE;
@@ -1012,30 +1012,18 @@ Module(
     try {
       downloadMsg = await message.sendReply("_Fetching Spotify info..._");
       const spotifyInfo = await spotifyTrack(url);
-      const { title, artist } = spotifyInfo;
+      const { title } = spotifyInfo;
 
       await message.edit(
-        `_Downloading *${title}* by *${artist}*..._`,
+        `_Downloading *${title}*..._`,
         message.jid,
         downloadMsg.key
       );
 
-      const query = `${title} ${artist}`;
-      const results = await searchYoutube(query, 1);
-
-      if (!results || results.length === 0) {
-        return await message.edit(
-          "_No matching songs found on YouTube!_",
-          message.jid,
-          downloadMsg.key
-        );
-      }
-
-      const video = results[0];
-      const result = await downloadAudio(video.url);
+      const result = await downloadSpotifyTrack(url);
       audioPath = result.path;
 
-      const mp3Path = await convertM4aToMp3(audioPath, { title: title || result?.title, artist: artist || result?.info?.channel?.name, thumbnail: spotifyInfo?.thumbnail || result?.info?.thumbnail });
+      const mp3Path = await convertM4aToMp3(audioPath, { title: title || result?.title, thumbnail: spotifyInfo?.thumbnail || result?.info?.thumbnail });
       audioPath = mp3Path;
 
       await message.edit(
