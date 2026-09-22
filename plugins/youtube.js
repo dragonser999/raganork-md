@@ -1,206 +1,21 @@
 const { Module } = require("../main");
 const fs = require("fs");
 const path = require("path");
-const os = require("os");
-const axios = require("axios");
-const { execFile } = require("child_process");
+const {
+  downloadVideo,
+  downloadAudio,
+  searchYoutube,
+  getVideoInfo,
+  convertM4aToMp3,
+  spotifyTrack,
+  downloadSpotifyTrack,
+} = require("./utils/yt");
 
 const config = require("../config");
 const MODE = config.MODE;
 const fromMe = MODE === "public" ? false : true;
 
 const VIDEO_SIZE_LIMIT = 150 * 1024 * 1024;
-
-// ===================== YouTube/Spotify helpers (merged from utils/yt.js) =====================
-
-const SEARCH_BASE = "https://eliteprotech-apis.zone.id";
-const INFO_BASE = "https://yt-api-pial.vercel.app";
-const SPOTIFY_BASE = "https://api-faa.my.id";
-
-const YT_TEMP_DIR = path.join(os.tmpdir(), "yt-bot-temp");
-
-const BROWSER_HEADERS = {
-  "User-Agent":
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-  Accept: "application/json, text/plain, */*",
-  "Accept-Language": "en-US,en;q=0.9",
-};
-
-const ytApi = axios.create({ headers: BROWSER_HEADERS, timeout: 20000 });
-
-if (!fs.existsSync(YT_TEMP_DIR)) {
-  fs.mkdirSync(YT_TEMP_DIR, { recursive: true });
-}
-
-function ytSafeName(str) {
-  return (str || "file").replace(/[\\/:*?"<>|]/g, "").trim().slice(0, 80);
-}
-
-async function ytApiGet(url, params, retries = 1) {
-  try {
-    const { data } = await ytApi.get(url, { params });
-    return data;
-  } catch (error) {
-    const status = error.response?.status;
-    const isTransient = !status || [502, 503, 504].includes(status);
-    if (isTransient && retries > 0) {
-      await new Promise((r) => setTimeout(r, 1500));
-      return ytApiGet(url, params, retries - 1);
-    }
-    throw new Error(`API error: ${status || error.message}`);
-  }
-}
-
-async function downloadFile(url, filename) {
-  const destPath = path.join(YT_TEMP_DIR, `${Date.now()}_${ytSafeName(filename)}`);
-  const response = await axios.get(url, {
-    responseType: "stream",
-    headers: BROWSER_HEADERS,
-    timeout: 60000,
-  });
-
-  await new Promise((resolve, reject) => {
-    const writer = fs.createWriteStream(destPath);
-    response.data.pipe(writer);
-    writer.on("finish", resolve);
-    writer.on("error", reject);
-  });
-
-  return destPath;
-}
-
-async function searchYoutube(query, limit = 10) {
-  const data = await ytApiGet(`${SEARCH_BASE}/search/ytsearch`, { q: query });
-
-  if (!data || !data.success || !data.results?.videos) return [];
-
-  return data.results.videos.slice(0, limit).map((v) => ({
-    title: v.title,
-    duration: v.duration,
-    views: v.views,
-    uploadedAt: v.uploaded,
-    channel: { name: v.author?.name },
-    url: v.url,
-    thumbnail: v.thumbnail,
-  }));
-}
-
-async function getVideoInfo(url) {
-  const data = await ytApiGet(`${INFO_BASE}/download`, { url });
-
-  if (!data || !data.status || !data.result) {
-    throw new Error("Failed to fetch video info");
-  }
-
-  const r = data.result;
-
-  const formats = (r.downloads || []).map((d) => ({
-    type: d.format === "mp3" ? "audio" : "video",
-    quality: d.quality,
-    size: null,
-    url: d.url,
-  }));
-
-  return {
-    title: r.title,
-    videoId: r.videoId,
-    thumbnail: r.thumbnail,
-    formats,
-  };
-}
-
-async function downloadVideo(url, quality) {
-  const info = await getVideoInfo(url);
-  const match = info.formats.find(
-    (f) => f.type === "video" && f.quality.includes(quality)
-  );
-
-  if (!match) throw new Error(`Quality ${quality} not available`);
-
-  const filePath = await downloadFile(match.url, `${info.title}.mp4`);
-  return { path: filePath, title: info.title };
-}
-
-async function downloadAudio(url) {
-  const info = await getVideoInfo(url);
-  const audio = info.formats.find((f) => f.type === "audio");
-
-  if (!audio) throw new Error("Audio not available");
-
-  const filePath = await downloadFile(audio.url, `${info.title}.mp3`);
-
-  return {
-    path: filePath,
-    title: info.title,
-    info: { channel: { name: null }, thumbnail: info.thumbnail },
-  };
-}
-
-async function spotifyTrack(url) {
-  const data = await ytApiGet(`${SPOTIFY_BASE}/faa/aio`, { url });
-
-  if (!data || !data.status || !data.result) {
-    throw new Error("Failed to fetch Spotify track info");
-  }
-
-  const r = data.result;
-  const audio = (r.downloads || []).find((d) => d.type === "audio");
-
-  return {
-    title: r.title,
-    thumbnail: r.thumbnail,
-    downloadUrl: audio?.url || null,
-  };
-}
-
-async function downloadSpotifyTrack(spotifyUrl) {
-  const track = await spotifyTrack(spotifyUrl);
-  if (!track.downloadUrl) throw new Error("No downloadable audio found");
-
-  const filePath = await downloadFile(track.downloadUrl, `${track.title}.mp3`);
-  return {
-    path: filePath,
-    title: track.title,
-    info: { channel: { name: null }, thumbnail: track.thumbnail },
-  };
-}
-
-async function convertM4aToMp3(audioPath, meta = {}) {
-  const { title, artist, thumbnail } = meta;
-  const outputPath = audioPath.replace(/\.[^.]+$/, "") + "_tagged.mp3";
-
-  let coverPath = null;
-  if (thumbnail) {
-    try {
-      coverPath = await downloadFile(thumbnail, "cover.jpg");
-    } catch (_) {
-      coverPath = null;
-    }
-  }
-
-  const args = ["-y", "-i", audioPath];
-  if (coverPath) args.push("-i", coverPath);
-  args.push("-map", "0:a");
-  if (coverPath) args.push("-map", "1:0", "-c:v", "mjpeg", "-disposition:v", "attached_cover");
-  args.push("-c:a", "copy", "-id3v2_version", "3");
-  if (title) args.push("-metadata", `title=${title}`);
-  if (artist) args.push("-metadata", `artist=${artist}`);
-  args.push(outputPath);
-
-  await new Promise((resolve, reject) => {
-    execFile("ffmpeg", args, (error) => {
-      if (error) return reject(error);
-      resolve();
-    });
-  });
-
-  if (fs.existsSync(audioPath)) fs.unlinkSync(audioPath);
-  if (coverPath && fs.existsSync(coverPath)) fs.unlinkSync(coverPath);
-
-  return outputPath;
-}
-
-// ===================== end merged helpers =====================
 
 
 function formatBytes(bytes) {
