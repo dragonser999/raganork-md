@@ -4,7 +4,10 @@ const path = require("path");
 const os = require("os");
 const { execFile } = require("child_process");
 
-const BASE = "https://jerrycoder.oggyapi.workers.dev";
+const SEARCH_BASE = "https://eliteprotech-apis.zone.id";
+const INFO_BASE = "https://yt-api-pial.vercel.app";
+const SPOTIFY_BASE = "https://api-faa.my.id";
+
 const TEMP_DIR = path.join(os.tmpdir(), "yt-bot-temp");
 
 const BROWSER_HEADERS = {
@@ -14,49 +17,32 @@ const BROWSER_HEADERS = {
   "Accept-Language": "en-US,en;q=0.9",
 };
 
-const api = axios.create({
-  headers: BROWSER_HEADERS,
-  timeout: 20000,
-});
-
-// Calls the API with browser-like headers, retrying once on a transient
-// server error (502/503/504/timeout) — Cloudflare Workers occasionally
-// bounce a request, a single retry after a short wait clears most of these.
-async function apiGet(endpoint, params, retries = 1) {
-  try {
-    const { data } = await api.get(`${BASE}${endpoint}`, { params });
-    return data;
-  } catch (error) {
-    const status = error.response?.status;
-    const isTransient = !status || [502, 503, 504].includes(status);
-    if (isTransient && retries > 0) {
-      await new Promise((r) => setTimeout(r, 1500));
-      return apiGet(endpoint, params, retries - 1);
-    }
-    throw new Error(`API error: ${status || error.message}`);
-  }
-}
+const api = axios.create({ headers: BROWSER_HEADERS, timeout: 20000 });
 
 if (!fs.existsSync(TEMP_DIR)) {
   fs.mkdirSync(TEMP_DIR, { recursive: true });
 }
 
 function safeName(str) {
-  return (str || "file")
-    .replace(/[\\/:*?"<>|]/g, "")
-    .trim()
-    .slice(0, 80);
+  return (str || "file").replace(/[\\/:*?"<>|]/g, "").trim().slice(0, 80);
 }
 
-function formatBytes(bytes) {
-  if (!bytes || bytes <= 0) return null;
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
+// GET with browser headers + 1 retry on transient errors (502/503/504/timeout)
+async function apiGet(url, params, retries = 1) {
+  try {
+    const { data } = await api.get(url, { params });
+    return data;
+  } catch (error) {
+    const status = error.response?.status;
+    const isTransient = !status || [502, 503, 504].includes(status);
+    if (isTransient && retries > 0) {
+      await new Promise((r) => setTimeout(r, 1500));
+      return apiGet(url, params, retries - 1);
+    }
+    throw new Error(`API error: ${status || error.message}`);
+  }
 }
 
-// Downloads a remote file (direct CDN link) to a local temp path
 async function downloadFile(url, filename) {
   const destPath = path.join(TEMP_DIR, `${Date.now()}_${safeName(filename)}`);
   const response = await axios.get(url, {
@@ -77,138 +63,122 @@ async function downloadFile(url, filename) {
 
 /**
  * Search YouTube
- * @param {string} query
- * @param {number} limit
  */
 async function searchYoutube(query, limit = 10) {
-  const data = await apiGet("/search/youtube", { q: query });
+  const data = await apiGet(`${SEARCH_BASE}/search/ytsearch`, { q: query });
 
-  if (!data || data.status !== "success" || !Array.isArray(data.result)) {
-    return [];
-  }
+  if (!data || !data.success || !data.results?.videos) return [];
 
-  return data.result.slice(0, limit).map((v) => ({
+  return data.results.videos.slice(0, limit).map((v) => ({
     title: v.title,
     duration: v.duration,
-    views: null, // not provided by this API
-    uploadedAt: null, // not provided by this API
-    channel: { name: v.channel },
-    url: v.link,
-    thumbnail: v.imageUrl,
+    views: v.views,
+    uploadedAt: v.uploaded,
+    channel: { name: v.author?.name },
+    url: v.url,
+    thumbnail: v.thumbnail,
   }));
 }
 
 /**
- * Get full video info + all available qualities
- * @param {string} url
+ * Get full video info + every available quality (video + audio) in one call
  */
 async function getVideoInfo(url) {
-  const data = await apiGet("/down/youtube", { url });
+  const data = await apiGet(`${INFO_BASE}/download`, { url });
 
-  if (!data || data.status !== "success") {
+  if (!data || !data.status || !data.result) {
     throw new Error("Failed to fetch video info");
   }
 
-  const durationSec = data.duration || 0;
+  const r = data.result;
 
-  // Normalize video formats: "mp4 (720p)" -> "720p", estimate size from bitrate
-  const seen = new Set();
-  const videoFormats = (data.medias || [])
-    .filter((m) => m.type === "video")
-    .sort((a, b) => (a.ext === "mp4" ? -1 : 1)) // prefer mp4 over webm on duplicates
-    .map((m) => {
-      const qMatch = (m.quality || m.label || "").match(/(\d+p)/);
-      const quality = qMatch ? qMatch[1] : m.quality;
-      const bytes = m.bitrate ? (m.bitrate / 8) * durationSec : 0;
-      return {
-        type: "video",
-        quality,
-        size: formatBytes(bytes),
-        url: m.url,
-        ext: m.ext,
-      };
-    })
-    .filter((f) => {
-      if (seen.has(f.quality)) return false;
-      seen.add(f.quality);
-      return true;
-    });
-
-  // This API has no dedicated audio-only stream; audio is fetched separately
-  // via /down/ytmp3 at download time. This entry just makes the "Audio Only"
-  // option show up in the quality list.
-  const audioFormat = { type: "audio", quality: "Audio", size: null };
+  const formats = (r.downloads || []).map((d) => ({
+    type: d.format === "mp3" ? "audio" : "video",
+    quality: d.quality, // e.g. "720p" or "Audio (128kbps)"
+    size: null, // not provided by this API
+    url: d.url,
+  }));
 
   return {
-    title: data.title,
-    videoId: null, // youtube.js falls back to extracting this from the url itself
-    channel: { name: data.channel },
-    thumbnail: data.thumbnail,
-    formats: [...videoFormats, audioFormat],
+    title: r.title,
+    videoId: r.videoId,
+    thumbnail: r.thumbnail,
+    formats,
   };
 }
 
 /**
- * Download a specific video quality (e.g. "720p", "360p")
- * @param {string} url
- * @param {string} quality
+ * Download a specific video quality (e.g. "720p")
  */
 async function downloadVideo(url, quality) {
-  const data = await apiGet("/down/youtube", { url });
+  const info = await getVideoInfo(url);
+  const match = info.formats.find(
+    (f) => f.type === "video" && f.quality.includes(quality)
+  );
 
-  if (!data || data.status !== "success") {
-    throw new Error("Failed to fetch video info");
-  }
+  if (!match) throw new Error(`Quality ${quality} not available`);
 
-  const media = (data.medias || [])
-    .filter((m) => m.type === "video")
-    .sort((a, b) => (a.ext === "mp4" ? -1 : 1))
-    .find((m) => (m.quality || m.label || "").includes(quality));
-
-  if (!media) {
-    // fall back to the quick single-quality endpoint (usually 720p)
-    const alt = await apiGet("/down/ytmp4-v1", { url });
-    if (!alt || alt.status !== "success" || !alt.url) {
-      throw new Error(`Quality ${quality} not available`);
-    }
-    const filePath = await downloadFile(alt.url, `${alt.title}.mp4`);
-    return { path: filePath, title: alt.title };
-  }
-
-  const filePath = await downloadFile(media.url, `${data.title}.${media.ext}`);
-  return { path: filePath, title: data.title };
+  const filePath = await downloadFile(match.url, `${info.title}.mp4`);
+  return { path: filePath, title: info.title };
 }
 
 /**
- * Download audio (mp3) for a YouTube link
- * @param {string} url
+ * Download audio (mp3)
  */
 async function downloadAudio(url) {
-  const data = await apiGet("/down/ytmp3", { url });
+  const info = await getVideoInfo(url);
+  const audio = info.formats.find((f) => f.type === "audio");
 
-  if (!data || data.status !== "success" || !data.url) {
-    throw new Error("Failed to fetch audio");
-  }
+  if (!audio) throw new Error("Audio not available");
 
-  const filePath = await downloadFile(data.url, `${data.title}.mp3`);
+  const filePath = await downloadFile(audio.url, `${info.title}.mp3`);
 
-  // Best-effort extra call to get channel + thumbnail for ID3 tagging.
-  // If it fails, we still return the audio file successfully.
-  let info = {};
-  try {
-    const videoInfo = await getVideoInfo(url);
-    info = { channel: videoInfo.channel, thumbnail: videoInfo.thumbnail };
-  } catch (_) {
-    // ignore, tagging will just skip channel/thumbnail
-  }
-
-  return { path: filePath, title: data.title, info };
+  // no channel name from this API, only thumbnail is available for tagging
+  return {
+    path: filePath,
+    title: info.title,
+    info: { channel: { name: null }, thumbnail: info.thumbnail },
+  };
 }
 
 /**
- * Tags an mp3 with title / artist / cover art using ffmpeg.
+ * Spotify: title + direct mp3 download link (no YouTube search needed)
+ */
+async function spotifyTrack(url) {
+  const data = await apiGet(`${SPOTIFY_BASE}/faa/aio`, { url });
+
+  if (!data || !data.status || !data.result) {
+    throw new Error("Failed to fetch Spotify track info");
+  }
+
+  const r = data.result;
+  const audio = (r.downloads || []).find((d) => d.type === "audio");
+
+  return {
+    title: r.title,
+    thumbnail: r.thumbnail,
+    downloadUrl: audio?.url || null,
+  };
+}
+
+/**
+ * Downloads the Spotify track directly (uses the mp3 link from spotifyTrack)
+ */
+async function downloadSpotifyTrack(spotifyUrl) {
+  const track = await spotifyTrack(spotifyUrl);
+  if (!track.downloadUrl) throw new Error("No downloadable audio found");
+
+  const filePath = await downloadFile(track.downloadUrl, `${track.title}.mp3`);
+  return {
+    path: filePath,
+    title: track.title,
+    info: { channel: { name: null }, thumbnail: track.thumbnail },
+  };
+}
+
+/**
+ * Tags an mp3 with title / cover art using ffmpeg.
  * Kept under the old name so youtube.js doesn't need to change its calls.
- * (The API above already returns real mp3s, so this only adds metadata now.)
  */
 async function convertM4aToMp3(audioPath, meta = {}) {
   const { title, artist, thumbnail } = meta;
@@ -239,29 +209,10 @@ async function convertM4aToMp3(audioPath, meta = {}) {
     });
   });
 
-  // cleanup originals
   if (fs.existsSync(audioPath)) fs.unlinkSync(audioPath);
   if (coverPath && fs.existsSync(coverPath)) fs.unlinkSync(coverPath);
 
   return outputPath;
-}
-
-/**
- * Get Spotify track title/artist/thumbnail
- * @param {string} url
- */
-async function spotifyTrack(url) {
-  const data = await apiGet("/down/spotify", { url });
-
-  if (!data || data.status !== "success") {
-    throw new Error("Failed to fetch Spotify track info");
-  }
-
-  return {
-    title: data.title,
-    artist: data.artist,
-    thumbnail: data.thumbnail,
-  };
 }
 
 module.exports = {
@@ -271,4 +222,5 @@ module.exports = {
   downloadAudio,
   convertM4aToMp3,
   spotifyTrack,
+  downloadSpotifyTrack,
 };
