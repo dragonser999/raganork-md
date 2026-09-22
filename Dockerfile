@@ -1,4 +1,4 @@
-FROM node:20-bullseye
+FROM node:20-bookworm
 
 # ffmpeg (for MP3 tagging/cover art) + build tools (sqlite3 is a native module and needs to compile)
 RUN apt-get update && \
