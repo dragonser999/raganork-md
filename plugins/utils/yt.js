@@ -8,69 +8,34 @@ const TEMP_DIR = path.join(os.tmpdir(), "yt-bot-temp");
 
 const YTDLP_BIN = "/opt/ytdlp/bin/yt-dlp";
 const DENO_BIN = "/root/.deno/bin/deno";
+const COOKIES_FILE = "/root/youtube-cookies.txt";
 
 const SPOTIFY_BASE = "https://api-faa.my.id";
 
 const BROWSER_HEADERS = {
   "User-Agent":
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+    "AppleWebKit/537.36 (KHTML, like Gecko) " +
+    "Chrome/124.0.0.0 Safari/537.36",
 };
 
 if (!fs.existsSync(TEMP_DIR)) {
   fs.mkdirSync(TEMP_DIR, { recursive: true });
 }
 
-/*
-|--------------------------------------------------------------------------
-| YouTube Cookies
-|--------------------------------------------------------------------------
-| Set YOUTUBE_COOKIES in VPS environment variables.
-|
-| Example:
-| YOUTUBE_COOKIES="your cookies.txt content"
-|
-| IMPORTANT:
-| Never put the cookie value in GitHub or public code.
-|--------------------------------------------------------------------------
-*/
-
-const COOKIES_FILE = path.join(TEMP_DIR, "youtube-cookies.txt");
-
-function prepareCookies() {
-  const cookies = process.env.YOUTUBE_COOKIES;
-
-  if (!cookies || !cookies.trim()) {
-    return null;
-  }
-
+function hasCookies() {
   try {
-    fs.writeFileSync(COOKIES_FILE, cookies, {
-      encoding: "utf8",
-      mode: 0o600,
-    });
-
-    try {
-      fs.chmodSync(COOKIES_FILE, 0o600);
-    } catch (_) {}
-
-    return COOKIES_FILE;
-  } catch (err) {
-    console.error("[YT] Failed to prepare cookies:", err.message);
-    return null;
+    return (
+      fs.existsSync(COOKIES_FILE) &&
+      fs.statSync(COOKIES_FILE).size > 0
+    );
+  } catch {
+    return false;
   }
 }
 
-/*
-|--------------------------------------------------------------------------
-| yt-dlp runner
-|--------------------------------------------------------------------------
-*/
-
 function runYtDlp(args) {
   return new Promise((resolve, reject) => {
-    const cookiesFile = prepareCookies();
-
     const finalArgs = [
       "--js-runtimes",
       `deno:${DENO_BIN}`,
@@ -78,8 +43,8 @@ function runYtDlp(args) {
       "--no-warnings",
       "--no-playlist",
 
-      ...(cookiesFile
-        ? ["--cookies", cookiesFile]
+      ...(hasCookies()
+        ? ["--cookies", COOKIES_FILE]
         : []),
 
       ...args,
@@ -94,14 +59,18 @@ function runYtDlp(args) {
 
         env: {
           ...process.env,
-          PATH: `/root/.deno/bin:/opt/ytdlp/bin:${process.env.PATH || ""}`,
+          PATH:
+            `/root/.deno/bin:/opt/ytdlp/bin:` +
+            `${process.env.PATH || ""}`,
         },
       },
       (error, stdout, stderr) => {
         if (error) {
-          const message = stderr || error.message;
-
-          return reject(new Error(message.trim()));
+          return reject(
+            new Error(
+              (stderr || error.message).trim()
+            )
+          );
         }
 
         resolve(stdout);
@@ -110,17 +79,14 @@ function runYtDlp(args) {
   });
 }
 
-/*
-|--------------------------------------------------------------------------
-| YouTube Search
-|--------------------------------------------------------------------------
-*/
+/* =========================
+   YOUTUBE SEARCH
+========================= */
 
 async function searchYoutube(query, limit = 10) {
   try {
     const output = await runYtDlp([
       `ytsearch${limit}:${query}`,
-
       "--flat-playlist",
       "--dump-json",
       "--skip-download",
@@ -142,11 +108,13 @@ async function searchYoutube(query, limit = 10) {
           data.channel ||
           data.uploader ||
           "Unknown",
+
         url:
           data.webpage_url ||
           (data.id
             ? `https://www.youtube.com/watch?v=${data.id}`
             : null),
+
         thumbnail:
           data.thumbnail ||
           (data.id
@@ -155,15 +123,15 @@ async function searchYoutube(query, limit = 10) {
       };
     });
   } catch (error) {
-    throw new Error(`YouTube search failed: ${error.message}`);
+    throw new Error(
+      `YouTube search failed: ${error.message}`
+    );
   }
 }
 
-/*
-|--------------------------------------------------------------------------
-| Video qualities
-|--------------------------------------------------------------------------
-*/
+/* =========================
+   VIDEO QUALITIES
+========================= */
 
 const VIDEO_QUALITIES = [
   "1440",
@@ -175,11 +143,9 @@ const VIDEO_QUALITIES = [
   "144",
 ];
 
-/*
-|--------------------------------------------------------------------------
-| Video Info
-|--------------------------------------------------------------------------
-*/
+/* =========================
+   VIDEO INFO
+========================= */
 
 async function getVideoInfo(url) {
   try {
@@ -209,16 +175,27 @@ async function getVideoInfo(url) {
 
     return {
       id: data.id,
-      title: data.title || "YouTube Video",
-      duration: data.duration || 0,
+
+      title:
+        data.title ||
+        "YouTube Video",
+
+      duration:
+        data.duration || 0,
+
       uploader:
         data.uploader ||
         data.channel ||
         "Unknown",
-      thumbnail: data.thumbnail || null,
+
+      thumbnail:
+        data.thumbnail || null,
+
       webpage_url:
         data.webpage_url || url,
-      formats: availableHeights,
+
+      formats:
+        availableHeights,
     };
   } catch (error) {
     throw new Error(
@@ -227,11 +204,9 @@ async function getVideoInfo(url) {
   }
 }
 
-/*
-|--------------------------------------------------------------------------
-| Find requested quality
-|--------------------------------------------------------------------------
-*/
+/* =========================
+   QUALITY PARSER
+========================= */
 
 function getRequestedHeight(quality) {
   const requested = parseInt(
@@ -246,34 +221,32 @@ function getRequestedHeight(quality) {
   return requested;
 }
 
-/*
-|--------------------------------------------------------------------------
-| Video Download
-|--------------------------------------------------------------------------
-*/
+/* =========================
+   VIDEO DOWNLOAD
+========================= */
 
-async function downloadVideo(url, quality = "720") {
-  const height = getRequestedHeight(quality);
-
-  const safeName =
-    `video_${Date.now()}_${Math.random()
-      .toString(36)
-      .slice(2, 8)}.mp4`;
+async function downloadVideo(
+  url,
+  quality = "720"
+) {
+  const height =
+    getRequestedHeight(quality);
 
   const outputPath = path.join(
     TEMP_DIR,
-    safeName
+    `video_${Date.now()}_${Math.random()
+      .toString(36)
+      .slice(2, 8)}.mp4`
   );
 
   try {
     await runYtDlp([
       "-f",
-      `bestvideo[height<=${height}]+bestaudio/best[height<=${height}]/best`,
+
+      `bestvideo[height<=${height}]+bestaudio/` +
+        `best[height<=${height}]/best`,
 
       "--merge-output-format",
-      "mp4",
-
-      "--recode-video",
       "mp4",
 
       "-o",
@@ -302,21 +275,16 @@ async function downloadVideo(url, quality = "720") {
   }
 }
 
-/*
-|--------------------------------------------------------------------------
-| Audio Download
-|--------------------------------------------------------------------------
-*/
+/* =========================
+   AUDIO DOWNLOAD
+========================= */
 
 async function downloadAudio(url) {
-  const safeName =
-    `audio_${Date.now()}_${Math.random()
-      .toString(36)
-      .slice(2, 8)}.mp3`;
-
   const outputPath = path.join(
     TEMP_DIR,
-    safeName
+    `audio_${Date.now()}_${Math.random()
+      .toString(36)
+      .slice(2, 8)}.mp3`
   );
 
   try {
@@ -355,13 +323,14 @@ async function downloadAudio(url) {
   }
 }
 
-/*
-|--------------------------------------------------------------------------
-| Generic file downloader
-|--------------------------------------------------------------------------
-*/
+/* =========================
+   GENERIC FILE DOWNLOAD
+========================= */
 
-async function downloadFile(url, outputPath) {
+async function downloadFile(
+  url,
+  outputPath
+) {
   const response = await axios({
     method: "GET",
     url,
@@ -370,27 +339,29 @@ async function downloadFile(url, outputPath) {
     timeout: 120000,
   });
 
-  await new Promise((resolve, reject) => {
-    const writer = fs.createWriteStream(
-      outputPath
-    );
+  await new Promise(
+    (resolve, reject) => {
+      const writer =
+        fs.createWriteStream(outputPath);
 
-    response.data.pipe(writer);
+      response.data.pipe(writer);
 
-    writer.on("finish", resolve);
-    writer.on("error", reject);
+      writer.on("finish", resolve);
+      writer.on("error", reject);
 
-    response.data.on("error", reject);
-  });
+      response.data.on(
+        "error",
+        reject
+      );
+    }
+  );
 
   return outputPath;
 }
 
-/*
-|--------------------------------------------------------------------------
-| Spotify API
-|--------------------------------------------------------------------------
-*/
+/* =========================
+   SPOTIFY
+========================= */
 
 async function spotifySearch(query) {
   try {
@@ -398,10 +369,11 @@ async function spotifySearch(query) {
       `${SPOTIFY_BASE}/faa/aio` +
       `?url=${encodeURIComponent(query)}`;
 
-    const response = await axios.get(url, {
-      timeout: 30000,
-      headers: BROWSER_HEADERS,
-    });
+    const response =
+      await axios.get(url, {
+        timeout: 30000,
+        headers: BROWSER_HEADERS,
+      });
 
     return response.data;
   } catch (error) {
@@ -411,23 +383,21 @@ async function spotifySearch(query) {
   }
 }
 
-/*
-|--------------------------------------------------------------------------
-| Spotify Track -> YouTube -> MP3
-|--------------------------------------------------------------------------
-*/
+/* =========================
+   SPOTIFY TRACK DOWNLOAD
+========================= */
 
 async function downloadSpotifyTrack(query) {
   try {
     const spotifyData =
       await spotifySearch(query);
 
-    let title =
+    const title =
       spotifyData?.title ||
       spotifyData?.name ||
       query;
 
-    let artist =
+    const artist =
       spotifyData?.artist ||
       spotifyData?.artists ||
       "";
@@ -436,7 +406,10 @@ async function downloadSpotifyTrack(query) {
       `${title} ${artist}`.trim();
 
     const results =
-      await searchYoutube(searchQuery, 5);
+      await searchYoutube(
+        searchQuery,
+        5
+      );
 
     if (!results.length) {
       throw new Error(
@@ -447,17 +420,23 @@ async function downloadSpotifyTrack(query) {
     const first = results[0];
 
     const audioPath =
-      await downloadAudio(first.url);
+      await downloadAudio(
+        first.url
+      );
 
     return {
       path: audioPath,
-      title: title,
-      artist: artist,
+
+      title,
+
+      artist,
+
       thumbnail:
         spotifyData?.thumbnail ||
         spotifyData?.image ||
         first.thumbnail ||
         null,
+
       youtube: first.url,
     };
   } catch (error) {
@@ -467,56 +446,56 @@ async function downloadSpotifyTrack(query) {
   }
 }
 
-/*
-|--------------------------------------------------------------------------
-| M4A -> MP3
-|--------------------------------------------------------------------------
-*/
+/* =========================
+   M4A -> MP3
+========================= */
 
 async function convertM4aToMp3(
   inputPath,
   outputPath
 ) {
-  return new Promise((resolve, reject) => {
-    execFile(
-      "ffmpeg",
-      [
-        "-y",
-        "-i",
-        inputPath,
+  return new Promise(
+    (resolve, reject) => {
+      execFile(
+        "ffmpeg",
+        [
+          "-y",
+          "-i",
+          inputPath,
 
-        "-codec:a",
-        "libmp3lame",
+          "-codec:a",
+          "libmp3lame",
 
-        "-b:a",
-        "128k",
+          "-b:a",
+          "128k",
 
-        outputPath,
-      ],
-      {
-        timeout: 120000,
-        maxBuffer: 1024 * 1024 * 20,
-      },
-      (error, stdout, stderr) => {
-        if (error) {
-          return reject(
-            new Error(
-              stderr || error.message
-            )
-          );
+          outputPath,
+        ],
+        {
+          timeout: 120000,
+          maxBuffer:
+            1024 * 1024 * 20,
+        },
+        (error, stdout, stderr) => {
+          if (error) {
+            return reject(
+              new Error(
+                stderr ||
+                  error.message
+              )
+            );
+          }
+
+          resolve(outputPath);
         }
-
-        resolve(outputPath);
-      }
-    );
-  });
+      );
+    }
+  );
 }
 
-/*
-|--------------------------------------------------------------------------
-| Cleanup
-|--------------------------------------------------------------------------
-*/
+/* =========================
+   CLEANUP
+========================= */
 
 function cleanupFile(filePath) {
   try {
@@ -529,32 +508,20 @@ function cleanupFile(filePath) {
   } catch (_) {}
 }
 
-/*
-|--------------------------------------------------------------------------
-| Exports
-|--------------------------------------------------------------------------
-*/
+/* =========================
+   EXPORTS
+========================= */
 
 module.exports = {
   runYtDlp,
-
   searchYoutube,
-
   getVideoInfo,
-
   downloadVideo,
-
   downloadAudio,
-
   downloadFile,
-
   spotifySearch,
-
   downloadSpotifyTrack,
-
   convertM4aToMp3,
-
   cleanupFile,
-
   VIDEO_QUALITIES,
 };
