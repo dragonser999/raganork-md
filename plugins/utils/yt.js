@@ -4,9 +4,7 @@ const path = require("path");
 const os = require("os");
 const { execFile } = require("child_process");
 
-const SEARCH_BASE = "https://eliteprotech-apis.zone.id";
-const JERRY_BASE = "https://jerrycoder.oggyapi.workers.dev";
-const SPOTIFY_BASE = "https://api-faa.my.id";
+const BASE = "https://api.nexray.eu.cc";
 
 const TEMP_DIR = path.join(os.tmpdir(), "yt-bot-temp");
 
@@ -25,14 +23,6 @@ if (!fs.existsSync(TEMP_DIR)) {
 
 function safeName(str) {
   return (str || "file").replace(/[\\/:*?"<>|]/g, "").trim().slice(0, 80);
-}
-
-function formatBytes(bytes) {
-  if (!bytes || bytes <= 0) return null;
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
 }
 
 // GET with browser headers + 1 retry on transient errors (502/503/504/timeout)
@@ -73,62 +63,50 @@ async function downloadFile(url, filename) {
  * Search YouTube
  */
 async function searchYoutube(query, limit = 10) {
-  const data = await apiGet(`${SEARCH_BASE}/search/ytsearch`, { q: query });
+  const data = await apiGet(`${BASE}/search/youtube`, { q: query });
 
-  if (!data || !data.success || !data.results?.videos) return [];
+  if (!data || !data.status || !Array.isArray(data.result)) return [];
 
-  return data.results.videos.slice(0, limit).map((v) => ({
+  return data.result.slice(0, limit).map((v) => ({
     title: v.title,
     duration: v.duration,
     views: v.views,
-    uploadedAt: v.uploaded,
-    channel: { name: v.author?.name },
+    uploadedAt: v.upload_at,
+    channel: { name: v.channel },
     url: v.url,
-    thumbnail: v.thumbnail,
+    thumbnail: v.image_url,
   }));
 }
 
+const VIDEO_QUALITIES = ["1080", "720", "480", "360", "240", "144"];
+
 /**
- * Get full video info + every available quality (video) in one call
+ * Get video metadata + the fixed list of selectable qualities.
+ * (This API returns one quality's download link per call, so we fetch
+ * cheap metadata via the 360p call and list qualities for the user to pick;
+ * the actual download link for the chosen quality is fetched in downloadVideo.)
  */
 async function getVideoInfo(url) {
-  const data = await apiGet(`${JERRY_BASE}/down/youtube`, { url });
+  const data = await apiGet(`${BASE}/downloader/v1/ytmp4`, { url, resolusi: "360" });
 
-  if (!data || data.status !== "success") {
+  if (!data || !data.status || !data.result) {
     throw new Error("Failed to fetch video info");
   }
 
-  const durationSec = data.duration || 0;
+  const r = data.result;
 
-  // Normalize "mp4 (720p)" -> "720p", estimate size from bitrate, prefer mp4 over webm on dupes
-  const seen = new Set();
-  const videoFormats = (data.medias || [])
-    .filter((m) => m.type === "video")
-    .sort((a, b) => (a.ext === "mp4" ? -1 : 1))
-    .map((m) => {
-      const qMatch = (m.quality || m.label || "").match(/(\d+p)/);
-      const quality = qMatch ? qMatch[1] : m.quality;
-      const bytes = m.bitrate ? (m.bitrate / 8) * durationSec : 0;
-      return {
-        type: "video",
-        quality,
-        size: formatBytes(bytes),
-        url: m.url,
-        ext: m.ext,
-      };
-    })
-    .filter((f) => {
-      if (seen.has(f.quality)) return false;
-      seen.add(f.quality);
-      return true;
-    });
+  const formats = VIDEO_QUALITIES.map((q) => ({
+    type: "video",
+    quality: `${q}p`,
+    size: null,
+  }));
 
   return {
-    title: data.title,
+    title: r.title,
     videoId: null,
-    channel: { name: data.channel },
-    thumbnail: data.thumbnail,
-    formats: videoFormats,
+    channel: { name: r.author },
+    thumbnail: r.thumbnail,
+    formats,
   };
 }
 
@@ -136,63 +114,62 @@ async function getVideoInfo(url) {
  * Download a specific video quality (e.g. "720p")
  */
 async function downloadVideo(url, quality) {
-  const info = await getVideoInfo(url);
-  const match = info.formats.find((f) => f.quality === quality || f.quality?.includes(quality));
+  const q = String(quality).replace(/p$/i, "");
+  const data = await apiGet(`${BASE}/downloader/v1/ytmp4`, { url, resolusi: q });
 
-  if (!match) throw new Error(`Quality ${quality} not available`);
+  if (!data || !data.status || !data.result?.url) {
+    throw new Error(`Quality ${quality} not available`);
+  }
 
-  const filePath = await downloadFile(match.url, `${info.title}.${match.ext || "mp4"}`);
-  return { path: filePath, title: info.title };
+  const filePath = await downloadFile(data.result.url, `${data.result.title}.mp4`);
+  return { path: filePath, title: data.result.title };
 }
 
 /**
- * Download audio (mp3) — direct, fast, single call
+ * Download audio (mp3)
  */
 async function downloadAudio(url) {
-  const data = await apiGet(`${JERRY_BASE}/down/ytmp3`, { url });
+  const data = await apiGet(`${BASE}/downloader/ytmp3`, { url });
 
-  if (!data || data.status !== "success" || !data.url) {
+  if (!data || !data.status || !data.result?.url) {
     throw new Error("Failed to fetch audio");
   }
 
-  const filePath = await downloadFile(data.url, `${data.title}.mp3`);
+  const { title } = data.result;
+  const filePath = await downloadFile(data.result.url, `${title}.mp3`);
 
-  // Best-effort extra call for thumbnail (used for ID3 cover art). Doesn't
-  // fail the whole download if this extra call fails.
+  // best-effort thumbnail for ID3 cover art (doesn't fail the download if it errors)
   let thumbnail = null;
   let channel = null;
   try {
     const info = await getVideoInfo(url);
     thumbnail = info.thumbnail;
     channel = info.channel?.name;
-  } catch (_) {
-    // ignore, tagging will just skip cover/artist
-  }
+  } catch (_) {}
 
   return {
     path: filePath,
-    title: data.title,
+    title,
     info: { channel: { name: channel }, thumbnail },
   };
 }
 
 /**
- * Spotify: title + direct mp3 download link (no YouTube search needed)
+ * Spotify: title + artist + direct download link
  */
 async function spotifyTrack(url) {
-  const data = await apiGet(`${SPOTIFY_BASE}/faa/aio`, { url });
+  const data = await apiGet(`${BASE}/downloader/spotify`, { url });
 
   if (!data || !data.status || !data.result) {
     throw new Error("Failed to fetch Spotify track info");
   }
 
   const r = data.result;
-  const audio = (r.downloads || []).find((d) => d.type === "audio");
-
   return {
     title: r.title,
-    thumbnail: r.thumbnail,
-    downloadUrl: audio?.url || null,
+    artist: r.artist,
+    thumbnail: r.thumbnail || null,
+    downloadUrl: r.url || null,
   };
 }
 
@@ -204,7 +181,7 @@ async function downloadSpotifyTrack(spotifyUrl) {
   return {
     path: filePath,
     title: track.title,
-    info: { channel: { name: null }, thumbnail: track.thumbnail },
+    info: { channel: { name: track.artist }, thumbnail: track.thumbnail },
   };
 }
 
