@@ -17,7 +17,7 @@ const BROWSER_HEADERS = {
   "Accept-Language": "en-US,en;q=0.9",
 };
 
-const api = axios.create({ headers: BROWSER_HEADERS, timeout: 20000 });
+const api = axios.create({ headers: BROWSER_HEADERS, timeout: 45000 });
 
 if (!fs.existsSync(TEMP_DIR)) {
   fs.mkdirSync(TEMP_DIR, { recursive: true });
