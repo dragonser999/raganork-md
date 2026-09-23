@@ -23,6 +23,10 @@ if (!fs.existsSync(TEMP_DIR)) {
   fs.mkdirSync(TEMP_DIR, { recursive: true });
 }
 
+/* ============================================================
+   COOKIE CHECK
+============================================================ */
+
 function hasCookies() {
   try {
     return (
@@ -34,11 +38,18 @@ function hasCookies() {
   }
 }
 
+/* ============================================================
+   RUN YT-DLP
+============================================================ */
+
 function runYtDlp(args) {
   return new Promise((resolve, reject) => {
     const finalArgs = [
       "--js-runtimes",
       `deno:${DENO_BIN}`,
+
+      "--remote-components",
+      "ejs:github",
 
       "--no-warnings",
       "--no-playlist",
@@ -64,6 +75,7 @@ function runYtDlp(args) {
             `${process.env.PATH || ""}`,
         },
       },
+
       (error, stdout, stderr) => {
         if (error) {
           return reject(
@@ -79,14 +91,15 @@ function runYtDlp(args) {
   });
 }
 
-/* =========================
+/* ============================================================
    YOUTUBE SEARCH
-========================= */
+============================================================ */
 
 async function searchYoutube(query, limit = 10) {
   try {
     const output = await runYtDlp([
       `ytsearch${limit}:${query}`,
+
       "--flat-playlist",
       "--dump-json",
       "--skip-download",
@@ -102,8 +115,13 @@ async function searchYoutube(query, limit = 10) {
 
       return {
         title: data.title || "Unknown",
-        duration: data.duration || 0,
-        views: data.view_count || 0,
+
+        duration:
+          data.duration || 0,
+
+        views:
+          data.view_count || 0,
+
         channel:
           data.channel ||
           data.uploader ||
@@ -129,9 +147,9 @@ async function searchYoutube(query, limit = 10) {
   }
 }
 
-/* =========================
+/* ============================================================
    VIDEO QUALITIES
-========================= */
+============================================================ */
 
 const VIDEO_QUALITIES = [
   "1440",
@@ -143,9 +161,9 @@ const VIDEO_QUALITIES = [
   "144",
 ];
 
-/* =========================
+/* ============================================================
    VIDEO INFO
-========================= */
+============================================================ */
 
 async function getVideoInfo(url) {
   try {
@@ -204,9 +222,9 @@ async function getVideoInfo(url) {
   }
 }
 
-/* =========================
+/* ============================================================
    QUALITY PARSER
-========================= */
+============================================================ */
 
 function getRequestedHeight(quality) {
   const requested = parseInt(
@@ -221,9 +239,9 @@ function getRequestedHeight(quality) {
   return requested;
 }
 
-/* =========================
+/* ============================================================
    VIDEO DOWNLOAD
-========================= */
+============================================================ */
 
 async function downloadVideo(
   url,
@@ -275,9 +293,9 @@ async function downloadVideo(
   }
 }
 
-/* =========================
+/* ============================================================
    AUDIO DOWNLOAD
-========================= */
+============================================================ */
 
 async function downloadAudio(url) {
   const outputPath = path.join(
@@ -323,9 +341,9 @@ async function downloadAudio(url) {
   }
 }
 
-/* =========================
+/* ============================================================
    GENERIC FILE DOWNLOAD
-========================= */
+============================================================ */
 
 async function downloadFile(
   url,
@@ -333,9 +351,13 @@ async function downloadFile(
 ) {
   const response = await axios({
     method: "GET",
+
     url,
+
     responseType: "stream",
+
     headers: BROWSER_HEADERS,
+
     timeout: 120000,
   });
 
@@ -346,8 +368,15 @@ async function downloadFile(
 
       response.data.pipe(writer);
 
-      writer.on("finish", resolve);
-      writer.on("error", reject);
+      writer.on(
+        "finish",
+        resolve
+      );
+
+      writer.on(
+        "error",
+        reject
+      );
 
       response.data.on(
         "error",
@@ -359,9 +388,9 @@ async function downloadFile(
   return outputPath;
 }
 
-/* =========================
-   SPOTIFY
-========================= */
+/* ============================================================
+   SPOTIFY SEARCH / API
+============================================================ */
 
 async function spotifySearch(query) {
   try {
@@ -372,6 +401,7 @@ async function spotifySearch(query) {
     const response =
       await axios.get(url, {
         timeout: 30000,
+
         headers: BROWSER_HEADERS,
       });
 
@@ -383,9 +413,9 @@ async function spotifySearch(query) {
   }
 }
 
-/* =========================
+/* ============================================================
    SPOTIFY TRACK DOWNLOAD
-========================= */
+============================================================ */
 
 async function downloadSpotifyTrack(query) {
   try {
@@ -417,7 +447,8 @@ async function downloadSpotifyTrack(query) {
       );
     }
 
-    const first = results[0];
+    const first =
+      results[0];
 
     const audioPath =
       await downloadAudio(
@@ -437,7 +468,8 @@ async function downloadSpotifyTrack(query) {
         first.thumbnail ||
         null,
 
-      youtube: first.url,
+      youtube:
+        first.url,
     };
   } catch (error) {
     throw new Error(
@@ -446,9 +478,9 @@ async function downloadSpotifyTrack(query) {
   }
 }
 
-/* =========================
-   M4A -> MP3
-========================= */
+/* ============================================================
+   M4A TO MP3
+============================================================ */
 
 async function convertM4aToMp3(
   inputPath,
@@ -458,8 +490,10 @@ async function convertM4aToMp3(
     (resolve, reject) => {
       execFile(
         "ffmpeg",
+
         [
           "-y",
+
           "-i",
           inputPath,
 
@@ -471,11 +505,14 @@ async function convertM4aToMp3(
 
           outputPath,
         ],
+
         {
           timeout: 120000,
+
           maxBuffer:
             1024 * 1024 * 20,
         },
+
         (error, stdout, stderr) => {
           if (error) {
             return reject(
@@ -493,9 +530,9 @@ async function convertM4aToMp3(
   );
 }
 
-/* =========================
+/* ============================================================
    CLEANUP
-========================= */
+============================================================ */
 
 function cleanupFile(filePath) {
   try {
@@ -508,20 +545,30 @@ function cleanupFile(filePath) {
   } catch (_) {}
 }
 
-/* =========================
+/* ============================================================
    EXPORTS
-========================= */
+============================================================ */
 
 module.exports = {
   runYtDlp,
+
   searchYoutube,
+
   getVideoInfo,
+
   downloadVideo,
+
   downloadAudio,
+
   downloadFile,
+
   spotifySearch,
+
   downloadSpotifyTrack,
+
   convertM4aToMp3,
+
   cleanupFile,
+
   VIDEO_QUALITIES,
 };
