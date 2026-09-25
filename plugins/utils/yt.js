@@ -4,9 +4,11 @@ const path = require("path");
 const os = require("os");
 const { execFile } = require("child_process");
 
+// Updated API Base URLs
 const SEARCH_BASE = "https://zellrayy.com";
 const SPOTIFY_BASE = "https://zellrayy.com";
-const INFO_BASE = "https://api.kyio.web.id";
+const YT_QUALITY_BASE = "https://yt-quality-api.vercel.app";
+const YT_SINGLE_BASE = "https://api.nexray.eu.cc";
 
 const TEMP_DIR = path.join(os.tmpdir(), "yt-bot-temp");
 
@@ -27,7 +29,7 @@ function safeName(str) {
   return (str || "file").replace(/[\\/:*?"<>|]/g, "").trim().slice(0, 80);
 }
 
-// GET with browser headers + 1 retry on transient errors (502/503/504/timeout)
+// Helper to make API requests with retry mechanism
 async function apiGet(url, params, retries = 1) {
   try {
     const { data } = await api.get(url, { params });
@@ -81,61 +83,87 @@ async function searchYoutube(query, limit = 10) {
 }
 
 /**
- * Get video metadata + every available quality (video + audio) in one
- * call. Every format's "url" is proxied through api.getindevice.com
- * (not a raw googlevideo link), so there's no cross-IP 403 issue.
+ * Fetch video metadata & formats using new API endpoints provided in the doc
  */
 async function getVideoInfo(url) {
-  const data = await apiGet(`${INFO_BASE}/api/v2/downloader/ytdl-v6`, { url });
+  let resData;
+  
+  // First try the quality options API
+  try {
+    resData = await apiGet(`${YT_QUALITY_BASE}/api/ytmp4`, { url });
+  } catch (e) {
+    // Fallback to single resolusi API
+    resData = await apiGet(`${YT_SINGLE_BASE}/downloader/v1/ytmp4`, { url, resolusi: "1080" });
+  }
 
-  if (!data || data.status !== 200 || !data.data) {
+  if (!resData || !resData.status || !resData.result) {
     throw new Error("Failed to fetch video info");
   }
 
-  const r = data.data;
-  const seenHeights = new Set();
+  const r = resData.result;
   const formats = [];
 
-  for (const f of r.formats || []) {
-    const dimMatch = f.quality?.match(/^(\d+)x(\d+)$/);
-    if (dimMatch) {
-      const height = Number(dimMatch[2]);
-      if (seenHeights.has(height)) continue;
-      seenHeights.add(height);
-      formats.push({ type: "video", quality: `${height}p`, size: f.size, url: f.url });
-      continue;
-    }
-    const kbpsMatch = f.quality?.match(/^(\d+)kbs$/);
-    if (kbpsMatch && f.format === "mp4") {
-      // prefer the mp4 (AAC) audio track over webm for compatibility
-      formats.push({ type: "audio", quality: f.quality, size: f.size, url: f.url });
-    }
+  if (r.downloads && Array.isArray(r.downloads)) {
+    r.downloads.forEach((item) => {
+      formats.push({
+        type: "video",
+        quality: item.quality,
+        size: null,
+        url: item.url,
+      });
+    });
+  } else if (r.url) {
+    formats.push({
+      type: "video",
+      quality: r.quality || "default",
+      size: null,
+      url: r.url,
+    });
+  }
+
+  // Audio track format fallback using lowest video quality stream or single stream URL
+  const audioUrl = r.downloads && r.downloads.length > 0
+    ? r.downloads[r.downloads.length - 1].url
+    : r.url;
+
+  if (audioUrl) {
+    formats.push({
+      type: "audio",
+      quality: "audio",
+      size: null,
+      url: audioUrl,
+    });
   }
 
   return {
     title: r.title,
     videoId: null,
     channel: { name: r.author },
-    thumbnail: r.thumbnail,
+    thumbnail: r.thumbnail || null,
     formats,
   };
 }
 
 /**
- * Download a specific video quality (e.g. "720p")
+ * Download video in specified quality
  */
 async function downloadVideo(url, quality) {
   const info = await getVideoInfo(url);
-  const match = info.formats.find((f) => f.type === "video" && f.quality === quality);
+  let match = info.formats.find((f) => f.type === "video" && f.quality === quality);
 
-  if (!match) throw new Error(`Quality ${quality} not available`);
+  if (!match) {
+    // Fallback to first available video format
+    match = info.formats.find((f) => f.type === "video");
+  }
+
+  if (!match) throw new Error(`Video format not available`);
 
   const filePath = await downloadFile(match.url, `${info.title}.mp4`);
   return { path: filePath, title: info.title };
 }
 
 /**
- * Download audio (mp3-compatible mp4/AAC track)
+ * Download audio track
  */
 async function downloadAudio(url) {
   const info = await getVideoInfo(url);
@@ -153,7 +181,7 @@ async function downloadAudio(url) {
 }
 
 /**
- * Spotify: title + artist + direct download link
+ * Spotify track info
  */
 async function spotifyTrack(url) {
   const data = await apiGet(`${SPOTIFY_BASE}/download/spotify`, { url });
@@ -171,6 +199,9 @@ async function spotifyTrack(url) {
   };
 }
 
+/**
+ * Download Spotify track
+ */
 async function downloadSpotifyTrack(spotifyUrl) {
   const track = await spotifyTrack(spotifyUrl);
   if (!track.downloadUrl) throw new Error("No downloadable audio found");
@@ -184,7 +215,7 @@ async function downloadSpotifyTrack(spotifyUrl) {
 }
 
 /**
- * Tags an mp3 with title / artist / cover art using ffmpeg.
+ * Converts audio & adds ID3 tags using ffmpeg
  */
 async function convertM4aToMp3(audioPath, meta = {}) {
   const { title, artist, thumbnail } = meta;
