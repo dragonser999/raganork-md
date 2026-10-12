@@ -262,7 +262,7 @@ Module(
 
 Module(
   {
-    pattern: "video ?(.*)",
+    pattern: "videohgsuf ?(.*)",
     fromMe: fromMe,
     desc: "Download YouTube video at 360p",
     usage: ".video <link>",
